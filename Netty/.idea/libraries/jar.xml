@@ -1,0 +1,13 @@
+<component name="libraryTable">
+  <library name="jar">
+    <CLASSES>
+      <root url="file://$USER_HOME$/易架构资料/安装包/netty-4.1.58.Final/jar" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="file://$USER_HOME$/易架构资料/安装包/netty-4.1.58.Final/jar" />
+    </SOURCES>
+    <jarDirectory url="file://$USER_HOME$/易架构资料/安装包/netty-4.1.58.Final/jar" recursive="false" />
+    <jarDirectory url="file://$USER_HOME$/易架构资料/安装包/netty-4.1.58.Final/jar" recursive="false" type="SOURCES" />
+  </library>
+</component>
