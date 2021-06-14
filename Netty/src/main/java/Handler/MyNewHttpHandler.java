@@ -21,72 +21,112 @@ public class MyNewHttpHandler extends SimpleChannelInboundHandler<FullHttpReques
     }
 
     protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest msg) throws Exception {
-        String uri= msg.uri();
-        if ("favicon.ico".equals(uri)){
+        String uri = msg.uri();
+        if ("favicon.ico".equals(uri)) {
             return;
         }
+        HttpResponse response = new DefaultHttpResponse(msg.protocolVersion(), HttpResponseStatus.OK);
         //先查询页面缓存
-        String filepath=location+uri;
-        char typetemp=getCache.getHashMap().get(filepath);
-        if (getCache.getHashMap().get(filepath)!=null){
-            switch (typetemp){
+        String filepath = location + uri;
+        if (getCache.getHashMap().get(filepath) != null) {
+            System.out.println("cache");
+            char typetemp = getCache.getHashMap().get(filepath);
+            switch (typetemp) {
                 case 'h':
+                    msg=dealEndWithH(msg);
+                    break;
+                case 'j':
+                    response=dealEndWithJ(response);
+                    break;
+                case 'c':
+                    response=dealEndWithC(response);
+                    break;
             }
-        }
-        File targetfile=new File(location+uri);
-        if (HttpUtil.is100ContinueExpected(msg)){
-            send100Continue(ctx);
-        }
-        //如果文件不存在就返回自制的404页面
+            File targetfile = new File(location + uri);
+            RandomAccessFile file = new RandomAccessFile(targetfile, "r");
+            boolean keepAlive = HttpUtil.isKeepAlive(msg);
+            if (keepAlive) {
+                response.headers().set(HttpHeaders.Names.CONTENT_LENGTH, file.length());
+                response.headers().set(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.KEEP_ALIVE);
+            }
+            ctx.write(response);
+            if (ctx.pipeline().get(SslHandler.class) == null) {
+                ctx.write(new DefaultFileRegion(file.getChannel(), 0, file.length()));
 
-        if (!targetfile.exists()){
-            targetfile=NotFound;
-        }
-        RandomAccessFile file=new RandomAccessFile(targetfile,"r");
-        HttpResponse response=new DefaultHttpResponse(msg.protocolVersion(),HttpResponseStatus.OK);
-        if (targetfile==NotFound){
-            response.setStatus(HttpResponseStatus.NOT_FOUND);
-            isNotFound=true;
-        }
-        if (filepath.endsWith(".html")){
-            msg.headers().set(HttpHeaders.Names.CONTENT_TYPE,"text/html; charset=UTF-8");
-            type='h';
-        }else if(filepath.endsWith(".js")){
-            response.headers().set(HttpHeaders.Names.CONTENT_TYPE,"application/x-javascript");
-            type='j';
-        }else if (filepath.endsWith(".css")){
-            response.headers().set(HttpHeaders.Names.CONTENT_TYPE,"text/css; charset=UTF-8");
-            type='c';
-        }
-        if (!isNotFound){
-            getCache.getHashMap().put(filepath,type);
-        }
-        boolean keepAlive= HttpUtil.isKeepAlive(msg);
-        if (keepAlive){
-            response.headers().set(HttpHeaders.Names.CONTENT_LENGTH,file.length());
-            response.headers().set(HttpHeaders.Names.CONNECTION,HttpHeaders.Values.KEEP_ALIVE);
-        }
-        ctx.write(response);
-        if (ctx.pipeline().get(SslHandler.class)==null){
-            ctx.write(new DefaultFileRegion(file.getChannel(),0,file.length()));
+            } else {
+                ctx.write(new ChunkedNioFile(file.getChannel()));
+            }
+            ChannelFuture future = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+            if (!keepAlive) {
+                future.addListener(ChannelFutureListener.CLOSE);
 
-        }else {
-            ctx.write(new ChunkedNioFile(file.getChannel()));
-        }
-        ChannelFuture future=ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
-        if (!keepAlive){
-            future.addListener(ChannelFutureListener.CLOSE);
+            }
+            file.close();
 
+        } else {
+
+            File targetfile = new File(location + uri);
+            if (HttpUtil.is100ContinueExpected(msg)) {
+                send100Continue(ctx);
+            }
+            //如果文件不存在就返回自制的404页面
+
+            if (!targetfile.exists()) {
+                targetfile = NotFound;
+            }
+            RandomAccessFile file = new RandomAccessFile(targetfile, "r");
+
+            if (targetfile == NotFound) {
+                response.setStatus(HttpResponseStatus.NOT_FOUND);
+                isNotFound = true;
+            }
+            if (filepath.endsWith(".html")) {
+                msg.headers().set(HttpHeaders.Names.CONTENT_TYPE, "text/html; charset=UTF-8");
+                type = 'h';
+            } else if (filepath.endsWith(".js")) {
+                response.headers().set(HttpHeaders.Names.CONTENT_TYPE, "application/x-javascript");
+                type = 'j';
+            } else if (filepath.endsWith(".css")) {
+                response.headers().set(HttpHeaders.Names.CONTENT_TYPE, "text/css; charset=UTF-8");
+                type = 'c';
+            }
+            if (!isNotFound) {
+                getCache.getHashMap().put(filepath, type);
+            }
+            boolean keepAlive = HttpUtil.isKeepAlive(msg);
+            if (keepAlive) {
+                response.headers().set(HttpHeaders.Names.CONTENT_LENGTH, file.length());
+                response.headers().set(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.KEEP_ALIVE);
+            }
+            ctx.write(response);
+            if (ctx.pipeline().get(SslHandler.class) == null) {
+                ctx.write(new DefaultFileRegion(file.getChannel(), 0, file.length()));
+
+            } else {
+                ctx.write(new ChunkedNioFile(file.getChannel()));
+            }
+            ChannelFuture future = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+            if (!keepAlive) {
+                future.addListener(ChannelFutureListener.CLOSE);
+
+            }
+            file.close();
         }
-        file.close();
     }
     private static void send100Continue(ChannelHandlerContext ctx){
         FullHttpResponse response=new DefaultFullHttpResponse(HttpVersion.HTTP_1_1,HttpResponseStatus.CONTINUE);
         ctx.writeAndFlush(response);
     }
     private FullHttpRequest dealEndWithH(FullHttpRequest msg){
-
-
+        msg.headers().set(HttpHeaders.Names.CONTENT_TYPE,"text/html; charset=UTF-8");
         return msg;
+    }
+    private HttpResponse dealEndWithJ(HttpResponse response){
+        response.headers().set(HttpHeaders.Names.CONTENT_TYPE,"application/x-javascript");
+        return response;
+    }
+    private HttpResponse dealEndWithC(HttpResponse response){
+        response.headers().set(HttpHeaders.Names.CONTENT_TYPE,"text/css; charset=UTF-8");
+        return response;
     }
 }
